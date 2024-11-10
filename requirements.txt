@@ -1,10 +1,11 @@
 streamlit
 numpy
 matplotlib
+pandas
 contextily
 geopandas
 shapely
 pyproj
 fiona
-pandas
-caching
+folium
+streamlit-folium
