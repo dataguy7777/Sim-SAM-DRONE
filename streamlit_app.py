@@ -25,7 +25,8 @@ DEFENDER_TYPES = {
 # Define attacker types
 ATTACKER_TYPES = {
     'Drone': {'speed': 250},  # in meters per time step
-    'Missile': {'speed': 1000}
+    'Missile': {'speed': 1000},
+    'Group of Drones': {'speed': 250}  # Group uses same speed as individual drone
 }
 
 # Define the simulation function
@@ -152,8 +153,17 @@ def run_simulation(params, attackers, defenders, target_position, log_area):
                     log_msg = f"Time {current_time}s: {defender_types[missile['defender_index']]} {missile['defender_index'] + 1} intercepted {attacker_types[missile['attacker_index']]} {missile['attacker_index'] + 1}"
                     logger.info(log_msg)
                     log_messages.append(log_msg)
+            else:
+                # Check if missile is out of range (simulate miss)
+                missile_max_range = 200000 / 111000  # Missile max range in degrees (e.g., 200 km)
+                missile_travel_distance = np.linalg.norm(missile['position'] - missile['start_position'])
+                if missile_travel_distance >= missile_max_range:
+                    missiles_to_remove.append(missile)
+                    log_msg = f"Time {current_time}s: Missile from {defender_types[missile['defender_index']]} {missile['defender_index'] + 1} missed {attacker_types[missile['attacker_index']]} {missile['attacker_index'] + 1}"
+                    logger.info(log_msg)
+                    log_messages.append(log_msg)
 
-        # Remove missiles that have reached their targets
+        # Remove missiles that have reached their targets or max range
         for missile in missiles_to_remove:
             missiles.remove(missile)
 
@@ -175,6 +185,7 @@ def run_simulation(params, attackers, defenders, target_position, log_area):
                     missile_velocity = missile_direction * missile_speed * time_step / 111000  # Convert meters to degrees
                     missile = {
                         'position': defender_pos.copy(),
+                        'start_position': defender_pos.copy(),
                         'velocity': missile_velocity,
                         'target': attacker_pos.copy(),
                         'path': [defender_pos.copy()],
@@ -294,6 +305,8 @@ with tab1:
     # Selection of attacker or defender type
     if marker_type == 'Attacker':
         attacker_type = st.selectbox("Select Attacker Type", list(ATTACKER_TYPES.keys()))
+        if attacker_type == 'Group of Drones':
+            st.write("Click on the map to place multiple drones as a group.")
     elif marker_type == 'Defender':
         defender_type = st.selectbox("Select Defender Type", list(DEFENDER_TYPES.keys()))
 
@@ -307,9 +320,10 @@ with tab1:
 
     # Add existing attacker markers
     for attacker in st.session_state['attackers']:
+        icon = 'plane' if attacker['type'] != 'Group of Drones' else 'fighter-jet'
         folium.Marker(
             location=[attacker['position'][1], attacker['position'][0]],
-            icon=folium.Icon(color='blue', icon='plane', prefix='fa'),
+            icon=folium.Icon(color='blue', icon=icon, prefix='fa'),
             popup=f"Attacker: {attacker['type']}"
         ).add_to(m)
 
@@ -336,11 +350,21 @@ with tab1:
         lat = output['last_clicked']['lat']
         lon = output['last_clicked']['lng']
         if marker_type == 'Attacker':
-            st.session_state['attackers'].append({
-                'type': attacker_type,
-                'position': [lon, lat]
-            })
-            st.success(f"{attacker_type} attacker added at ({lat:.5f}, {lon:.5f})")
+            if 'attacker_type' not in st.session_state:
+                st.session_state['attacker_type'] = attacker_type
+            if attacker_type == 'Group of Drones':
+                # Allow multiple clicks to add drones to the group
+                st.session_state['attackers'].append({
+                    'type': 'Drone',  # Each drone is added as an individual attacker
+                    'position': [lon, lat]
+                })
+                st.success(f"Drone added to group at ({lat:.5f}, {lon:.5f})")
+            else:
+                st.session_state['attackers'].append({
+                    'type': attacker_type,
+                    'position': [lon, lat]
+                })
+                st.success(f"{attacker_type} attacker added at ({lat:.5f}, {lon:.5f})")
         elif marker_type == 'Defender':
             st.session_state['defenders'].append({
                 'type': defender_type,
