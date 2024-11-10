@@ -2,7 +2,6 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Wedge, Circle
-from streamlit import caching
 import time
 import contextily as ctx
 import geopandas as gpd
@@ -147,7 +146,7 @@ with tab1:
 
     if st.button("Start Simulation"):
         # Clear cache to reset simulation
-        caching.clear_cache()
+        st.cache_data.clear()
         st.session_state['params'] = params
         st.session_state['run_simulation'] = True
     else:
