@@ -410,69 +410,46 @@ def run_simulation(params, attackers, defenders, target_position, log_area):
     return frames
 
 # -------------------- Map Rendering Functions --------------------
-def render_target_map(target_position):
+def render_map(target_position, attackers, defenders):
     """
-    Render the Folium map for target placement.
+    Render the Folium map with target, attackers, and defenders.
 
     Parameters:
         target_position (list): [longitude, latitude] of the target.
+        attackers (list): List of attacker dictionaries.
+        defenders (list): List of defender dictionaries.
 
     Returns:
         folium.Map: Rendered Folium map object.
     """
     donetsk_coords = [48.0159, 37.8028]  # Latitude, Longitude
     m = folium.Map(location=donetsk_coords, zoom_start=12)
+
+    # Add target marker
     if target_position:
         folium.Marker(
             location=[target_position[1], target_position[0]],
             icon=folium.Icon(color='green', icon='star', prefix='fa'),
             popup="Target"
         ).add_to(m)
-    return m
 
-def render_attackers_map(attacker_type):
-    """
-    Render the Folium map for attackers placement.
+    # Add attacker markers
+    for attacker in attackers:
+        icon = 'fighter-jet' if attacker['type'] == 'Group of Drones' else 'plane'
+        folium.Marker(
+            location=[attacker['position'][1], attacker['position'][0]],
+            icon=folium.Icon(color='blue', icon=icon, prefix='fa'),
+            popup=f"{attacker['type']}"
+        ).add_to(m)
 
-    Parameters:
-        attacker_type (str): Type of the attacker being added.
+    # Add defender markers
+    for defender in defenders:
+        folium.Marker(
+            location=[defender['position'][1], defender['position'][0]],
+            icon=folium.Icon(color='red', icon='shield', prefix='fa'),
+            popup=f"{defender['type']}"
+        ).add_to(m)
 
-    Returns:
-        folium.Map: Rendered Folium map object.
-    """
-    donetsk_coords = [48.0159, 37.8028]  # Latitude, Longitude
-    m = folium.Map(location=donetsk_coords, zoom_start=12)
-    # Add existing attackers of the selected type to the map
-    for attacker in st.session_state['attackers']:
-        if attacker['type'] == attacker_type:
-            icon = 'plane' if attacker['type'] != 'Group of Drones' else 'fighter-jet'
-            folium.Marker(
-                location=[attacker['position'][1], attacker['position'][0]],
-                icon=folium.Icon(color='blue', icon=icon, prefix='fa'),
-                popup=f"{attacker['type']}"
-            ).add_to(m)
-    return m
-
-def render_defenders_map(defender_type):
-    """
-    Render the Folium map for defenders placement.
-
-    Parameters:
-        defender_type (str): Type of the defender being added.
-
-    Returns:
-        folium.Map: Rendered Folium map object.
-    """
-    donetsk_coords = [48.0159, 37.8028]  # Latitude, Longitude
-    m = folium.Map(location=donetsk_coords, zoom_start=12)
-    # Add existing defenders of the selected type to the map
-    for defender in st.session_state['defenders']:
-        if defender['type'] == defender_type:
-            folium.Marker(
-                location=[defender['position'][1], defender['position'][0]],
-                icon=folium.Icon(color='red', icon='shield', prefix='fa'),
-                popup=f"{defender['type']}"
-            ).add_to(m)
     return m
 
 # -------------------- Streamlit Application --------------------
@@ -495,9 +472,10 @@ def main():
     # -------------------- Simulation Setup Tab --------------------
     with tab_setup:
         st.header("Simulation Setup")
-        st.write("Configure general simulation parameters and set the target location.")
+        st.write("Configure simulation parameters, place the target, and add attackers and defenders.")
 
         # Simulation parameters
+        st.subheader("Simulation Parameters")
         col1, col2, col3 = st.columns(3)
         with col1:
             avoidance_radius = st.slider(
@@ -519,99 +497,147 @@ def main():
             'time_step': time_step
         }
 
-        st.subheader("Set Target Location")
-        st.write("Use the map below to place the target location where attackers will navigate towards.")
+        # Forms for placing target, adding attackers, and adding defenders
+        st.subheader("Configure Entities")
 
-        # Render target placement map
-        target_map = render_target_map(st.session_state['target_position'])
-        output_target = st_folium(target_map, width=700, height=500, key="target_map")
+        # Place Target Form
+        with st.form(key='place_target_form'):
+            st.write("**Place Target**")
+            st.write("Click on the map below to place the target location.")
+            submitted = st.form_submit_button("Set Target Location")
+            if submitted:
+                if st.session_state['target_position']:
+                    st.warning("Target is already set. Please clear simulation settings to set a new target.")
+                else:
+                    st.session_state['current_action'] = 'set_target'
+                    st.info("Click on the map to place the target.")
 
-        # Handle target placement
-        if output_target and 'last_clicked' in output_target and output_target['last_clicked'] is not None:
-            lat = output_target['last_clicked']['lat']
-            lon = output_target['last_clicked']['lng']
-            st.session_state['target_position'] = [lon, lat]
-            st.success(f"Target set at ({lat:.5f}, {lon:.5f})")
-            logger.info(f"Target set at ({lon}, {lat}).")
+        # Add Attacker Form
+        with st.form(key='add_attacker_form'):
+            st.write("**Add New Attacker**")
+            attacker_type = st.radio(
+                "Select Attacker Type",
+                list(ATTACKER_TYPES.keys()),
+                key='select_attacker_type_add'
+            )
+            submitted = st.form_submit_button("Add Attacker")
+            if submitted:
+                st.session_state['current_action'] = 'add_attacker'
+                st.session_state['selected_attacker_type'] = attacker_type
+                st.info("Click on the map to place the attacker.")
+
+        # Add Defender Form
+        with st.form(key='add_defender_form'):
+            st.write("**Add New Defender**")
+            defender_type = st.radio(
+                "Select Defender Type",
+                list(DEFENDER_TYPES.keys()),
+                key='select_defender_type_add'
+            )
+            submitted = st.form_submit_button("Add Defender")
+            if submitted:
+                st.session_state['current_action'] = 'add_defender'
+                st.session_state['selected_defender_type'] = defender_type
+                st.info("Click on the map to place the defender.")
+
+        # Render the map with existing entities
+        st.subheader("Map Interface")
+        map_key = f"simulation_map_{st.session_state.get('map_counter', 0)}"
+        st.session_state['map_counter'] = st.session_state.get('map_counter', 0) + 1
+        simulation_map = render_map(
+            st.session_state['target_position'],
+            st.session_state['attackers'],
+            st.session_state['defenders']
+        )
+        output_map = st_folium(simulation_map, width=700, height=500, key=map_key)
+
+        # Handle map clicks based on current action
+        if output_map and 'last_clicked' in output_map and output_map['last_clicked'] is not None:
+            lat = output_map['last_clicked']['lat']
+            lon = output_map['last_clicked']['lng']
+            position = [lon, lat]
+
+            current_action = st.session_state.get('current_action', None)
+
+            if current_action == 'set_target':
+                st.session_state['target_position'] = position
+                st.success(f"Target set at ({lat:.5f}, {lon:.5f}).")
+                logger.info(f"Target set at {position}.")
+                st.session_state['current_action'] = None
+
+            elif current_action == 'add_attacker':
+                attacker_type = st.session_state.get('selected_attacker_type', None)
+                if attacker_type:
+                    add_attacker(attacker_type, position)
+                    st.success(f"{attacker_type} added at ({lat:.5f}, {lon:.5f}).")
+                    st.session_state['current_action'] = None
+
+            elif current_action == 'add_defender':
+                defender_type = st.session_state.get('selected_defender_type', None)
+                if defender_type:
+                    add_defender(defender_type, position)
+                    st.success(f"{defender_type} Defender added at ({lat:.5f}, {lon:.5f}).")
+                    st.session_state['current_action'] = None
+
+            else:
+                st.warning("No action selected. Please use the forms above to add entities.")
+
             # Clear last clicked to prevent duplicate entries
-            output_target['last_clicked'] = None
-
-        # Display target status
-        st.write(f"**Target Set**: {'Yes' if st.session_state['target_position'] else 'No'}")
+            output_map['last_clicked'] = None
 
         # Simulation control buttons
-        if st.button("Start Simulation"):
-            if not st.session_state['target_position']:
-                st.error("Please set the target location on the map.")
-                logger.error("Simulation start failed: Target location not set.")
-            elif len(st.session_state['attackers']) == 0:
-                st.error("Please add at least one Attacker in the 'Attackers' tab.")
-                logger.error("Simulation start failed: No attackers added.")
-            elif len(st.session_state['defenders']) == 0:
-                st.error("Please add at least one Defender in the 'Defenders' tab.")
-                logger.error("Simulation start failed: No defenders added.")
-            else:
-                st.session_state['params'] = params
-                st.session_state['run_simulation'] = True
-                logger.info("Simulation started.")
-        else:
-            st.session_state['run_simulation'] = False
-
-        # Clear all simulation settings
-        if st.button("Clear All Simulation Settings"):
-            st.session_state['attackers'] = []
-            st.session_state['defenders'] = []
-            st.session_state['target_position'] = None
-            st.session_state['run_simulation'] = False
-            st.success("All simulation settings have been cleared.")
-            logger.info("All simulation settings cleared.")
+        st.subheader("Simulation Controls")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Start Simulation"):
+                if not st.session_state['target_position']:
+                    st.error("Please set the target location in the 'Configure Entities' section.")
+                    logger.error("Simulation start failed: Target location not set.")
+                elif len(st.session_state['attackers']) == 0:
+                    st.error("Please add at least one attacker in the 'Configure Entities' section.")
+                    logger.error("Simulation start failed: No attackers added.")
+                elif len(st.session_state['defenders']) == 0:
+                    st.error("Please add at least one defender in the 'Configure Entities' section.")
+                    logger.error("Simulation start failed: No defenders added.")
+                else:
+                    st.session_state['params'] = params
+                    st.session_state['run_simulation'] = True
+                    logger.info("Simulation started.")
+        with col2:
+            if st.button("Clear All Simulation Settings"):
+                st.session_state['attackers'] = []
+                st.session_state['defenders'] = []
+                st.session_state['target_position'] = None
+                st.session_state['run_simulation'] = False
+                st.session_state['current_action'] = None
+                st.session_state['selected_attacker_type'] = None
+                st.session_state['selected_defender_type'] = None
+                st.session_state['attackers_map_counter'] = 0
+                st.session_state['defenders_map_counter'] = 0
+                st.success("All simulation settings have been cleared.")
+                logger.info("All simulation settings cleared.")
 
     # -------------------- Attackers Tab --------------------
     with tab_attackers:
-        st.header("Attackers Management")
-        st.write("Manage the list of attackers by adding or editing them.")
+        st.header("Attackers")
+        st.write("List of all attackers with their details.")
 
-        # Radio buttons to select attacker type to add
-        st.subheader("Add New Attacker")
-        attacker_type = st.radio(
-            "Select Attacker Type",
-            list(ATTACKER_TYPES.keys()),
-            key='select_attacker_type'
-        )
-
-        st.write("**Place Attacker on Map**")
-        # Generate a unique key for the map using a counter
-        map_key = f"attackers_map_{st.session_state['attackers_map_counter']}"
-        st.session_state['attackers_map_counter'] += 1
-
-        # Render attackers placement map
-        attackers_map = render_attackers_map(attacker_type)
-        output_attack = st_folium(attackers_map, width=700, height=400, key=map_key)
-
-        # Handle attacker placement
-        if output_attack and 'last_clicked' in output_attack and output_attack['last_clicked'] is not None:
-            lat = output_attack['last_clicked']['lat']
-            lon = output_attack['last_clicked']['lng']
-            position = [lon, lat]
-            add_attacker(attacker_type, position)
-            st.success(f"{attacker_type} added at ({lat:.5f}, {lon:.5f}).")
-            # Clear last clicked to prevent duplicate entries
-            output_attack['last_clicked'] = None
-
-        # Display list of attackers
-        st.subheader("Existing Attackers")
         if len(st.session_state['attackers']) == 0:
             st.write("No attackers added yet.")
         else:
             for idx, attacker in enumerate(st.session_state['attackers']):
                 with st.expander(f"Attacker {idx + 1}: {attacker['type']}"):
-                    st.write(f"**Type**: {attacker['type']}")
-                    st.write(f"**Position**: ({attacker['position'][1]:.5f}, {attacker['position'][0]:.5f})")
+                    st.write(f"**Type:** {attacker['type']}")
+                    st.write(f"**Position:** ({attacker['position'][1]:.5f}, {attacker['position'][0]:.5f})")
+                    st.write(f"**Radar Cross Section:** {attacker['radar_cross_section']} m²")
+                    st.write(f"**Speed:** {attacker['speed']} m/s")
+                    st.write(f"**Altitude:** {attacker['altitude']} meters")
+                    st.write(f"**Guidance:** {attacker['guidance']}")
 
                     # Editable parameters based on attacker type
                     if attacker['type'] == 'Drone':
-                        with st.form(key=f'attacker_form_{idx}'):
-                            st.write("**Drone Parameters**")
+                        with st.form(key=f'update_attacker_form_{idx}'):
+                            st.write("**Update Drone Parameters**")
                             radar_cs = st.number_input(
                                 "Radar Cross Section (m²)",
                                 min_value=0.01,
@@ -648,9 +674,10 @@ def main():
                                 }
                                 update_attacker(idx, updated_params)
                                 st.success(f"Drone {idx + 1} updated.")
+
                     elif attacker['type'] == 'Group of Drones':
-                        with st.form(key=f'attacker_form_{idx}'):
-                            st.write("**Group of Drones Parameters**")
+                        with st.form(key=f'update_attacker_group_form_{idx}'):
+                            st.write("**Update Group of Drones Parameters**")
                             radar_cs = st.number_input(
                                 "Radar Cross Section per Drone (m²)",
                                 min_value=0.01,
@@ -696,93 +723,53 @@ def main():
                                 update_attacker(idx, updated_params)
                                 st.success(f"Group of Drones {idx + 1} updated.")
 
-                    # Delete attacker button
-                    if st.button(f"Delete Attacker {idx + 1}", key=f'delete_attacker_{idx}'):
-                        del st.session_state['attackers'][idx]
-                        st.success(f"Attacker {idx + 1} deleted.")
-                        logger.info(f"Attacker {idx + 1} deleted.")
-
     # -------------------- Defenders Tab --------------------
     with tab_defenders:
-        st.header("Defenders Management")
-        st.write("Manage the list of defenders by adding or editing them.")
+        st.header("Defenders")
+        st.write("List of all defenders with their details.")
 
-        # Radio buttons to select defender type to add
-        st.subheader("Add New Defender")
-        defender_type = st.radio(
-            "Select Defender Type",
-            list(DEFENDER_TYPES.keys()),
-            key='select_defender_type'
-        )
-
-        st.write("**Place Defender on Map**")
-        # Generate a unique key for the map using a counter
-        map_key = f"defenders_map_{st.session_state['defenders_map_counter']}"
-        st.session_state['defenders_map_counter'] += 1
-
-        # Render defenders placement map
-        defenders_map = render_defenders_map(defender_type)
-        output_defender = st_folium(defenders_map, width=700, height=400, key=map_key)
-
-        # Handle defender placement
-        if output_defender and 'last_clicked' in output_defender and output_defender['last_clicked'] is not None:
-            lat = output_defender['last_clicked']['lat']
-            lon = output_defender['last_clicked']['lng']
-            position = [lon, lat]
-            add_defender(defender_type, position)
-            st.success(f"{defender_type} Defender added at ({lat:.5f}, {lon:.5f}).")
-            # Clear last clicked to prevent duplicate entries
-            output_defender['last_clicked'] = None
-
-        # Display list of defenders
-        st.subheader("Existing Defenders")
         if len(st.session_state['defenders']) == 0:
             st.write("No defenders added yet.")
         else:
             for idx, defender in enumerate(st.session_state['defenders']):
                 with st.expander(f"Defender {idx + 1}: {defender['type']}"):
-                    st.write(f"**Type**: {defender['type']}")
-                    st.write(f"**Position**: ({defender['position'][1]:.5f}, {defender['position'][0]:.5f})")
-                    st.write(f"**Missiles Available**: {defender['missile_number']}/{DEFENDER_TYPES[defender['type']]['max_missile_number']}")
+                    st.write(f"**Type:** {defender['type']}")
+                    st.write(f"**Position:** ({defender['position'][1]:.5f}, {defender['position'][0]:.5f})")
+                    st.write(f"**Range:** {defender['range'] * 111000} meters")
+                    st.write(f"**Missiles Available:** {defender['missile_number']}/{DEFENDER_TYPES[defender['type']]['max_missile_number']}")
+                    st.write(f"**Max Targets:** {defender['max_targets']}")
 
                     # Editable parameters based on defender type
-                    if defender['type'] in DEFENDER_TYPES:
-                        with st.form(key=f'defender_form_{idx}'):
-                            st.write("**Defender Parameters**")
-                            range_m = st.number_input(
-                                "Range (meters)",
-                                min_value=1000,
-                                value=int(defender['range'] * 111000),
-                                key=f'range_defender_{idx}'
-                            )
-                            max_targets = st.number_input(
-                                "Max Targets to Track",
-                                min_value=1,
-                                value=defender['max_targets'],
-                                key=f'max_targets_defender_{idx}'
-                            )
-                            missile_number = st.number_input(
-                                "Missile Number",
-                                min_value=0,
-                                max_value=DEFENDER_TYPES[defender['type']]['max_missile_number'],
-                                value=defender['missile_number'],
-                                key=f'missile_number_defender_{idx}'
-                            )
-                            submitted = st.form_submit_button("Update Defender")
-                            if submitted:
-                                updated_params = {
-                                    'range': range_m / 111000,  # Convert meters to degrees
-                                    'max_targets': max_targets,
-                                    'missile_number': missile_number
-                                }
-                                update_defender(idx, updated_params)
-                                st.success(f"Defender {idx + 1} updated.")
-
-                    # Delete defender button
-                    if st.button(f"Delete Defender {idx + 1}", key=f'delete_defender_{idx}'):
-                        del st.session_state['defenders'][idx]
-                        st.success(f"Defender {idx + 1} deleted.")
-                        logger.info(f"Defender {idx + 1} deleted.")
+                    with st.form(key=f'update_defender_form_{idx}'):
+                        st.write("**Update Defender Parameters**")
+                        range_m = st.number_input(
+                            "Range (meters)",
+                            min_value=1000,
+                            value=int(defender['range'] * 111000),
+                            key=f'range_defender_{idx}'
+                        )
+                        max_targets = st.number_input(
+                            "Max Targets to Track",
+                            min_value=1,
+                            value=defender['max_targets'],
+                            key=f'max_targets_defender_{idx}'
+                        )
+                        missile_number = st.number_input(
+                            "Missile Number",
+                            min_value=0,
+                            max_value=DEFENDER_TYPES[defender['type']]['max_missile_number'],
+                            value=defender['missile_number'],
+                            key=f'missile_number_defender_{idx}'
+                        )
+                        submitted = st.form_submit_button("Update Defender")
+                        if submitted:
+                            updated_params = {
+                                'range': range_m / 111000,  # Convert meters to degrees
+                                'max_targets': max_targets,
+                                'missile_number': missile_number
+                            }
+                            update_defender(idx, updated_params)
+                            st.success(f"Defender {idx + 1} updated.")
 
     # -------------------- Simulation Results Tab --------------------
     with tab_results:
@@ -814,7 +801,7 @@ def main():
             # Reset simulation run flag
             st.session_state['run_simulation'] = False
         else:
-            st.write("Please configure the simulation in the 'Simulation Setup', 'Attackers', and 'Defenders' tabs, then start the simulation.")
+            st.write("Please configure the simulation in the 'Simulation Setup' tab and start the simulation.")
 
 # -------------------- Run the Application --------------------
 if __name__ == "__main__":
