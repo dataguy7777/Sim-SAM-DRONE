@@ -74,7 +74,9 @@ ATTACKER_TYPES = {
 
 # -------------------- Session State Initialization --------------------
 def initialize_session_state():
-    """Initialize session state variables for attackers, defenders, and target."""
+    """
+    Initialize session state variables for attackers, defenders, and target.
+    """
     if 'attackers' not in st.session_state:
         st.session_state['attackers'] = []
     if 'defenders' not in st.session_state:
@@ -569,216 +571,218 @@ def main():
         st.header("Attackers Management")
         st.write("Manage the list of attackers by adding or editing them.")
 
-        # List existing attackers
-        for idx, attacker in enumerate(st.session_state['attackers']):
-            with st.expander(f"Attacker {idx + 1}: {attacker['type']}"):
-                st.write(f"**Type**: {attacker['type']}")
-                st.write(f"**Position**: ({attacker['position'][1]:.5f}, {attacker['position'][0]:.5f})")
-
-                # Editable parameters based on attacker type
-                if attacker['type'] == 'Drone':
-                    with st.form(key=f'attacker_form_{idx}'):
-                        st.write("**Drone Parameters**")
-                        radar_cs = st.number_input(
-                            "Radar Cross Section (m²)",
-                            min_value=0.01,
-                            value=attacker['radar_cross_section'],
-                            key=f'radar_cs_{idx}'
-                        )
-                        speed = st.number_input(
-                            "Speed (meters per time step)",
-                            min_value=100,
-                            max_value=1000,
-                            value=attacker['speed'],
-                            key=f'speed_{idx}'
-                        )
-                        altitude = st.number_input(
-                            "Altitude (meters)",
-                            min_value=100,
-                            max_value=10000,
-                            value=attacker['altitude'],
-                            key=f'altitude_{idx}'
-                        )
-                        guidance = st.selectbox(
-                            "Guidance Type",
-                            ATTACKER_TYPES['Drone']['guidance_types'],
-                            index=ATTACKER_TYPES['Drone']['guidance_types'].index(attacker['guidance']),
-                            key=f'guidance_{idx}'
-                        )
-                        submitted = st.form_submit_button("Update Drone")
-                        if submitted:
-                            updated_params = {
-                                'radar_cross_section': radar_cs,
-                                'speed': speed,
-                                'altitude': altitude,
-                                'guidance': guidance
-                            }
-                            update_attacker(idx, updated_params)
-                            st.success(f"Drone {idx + 1} updated.")
-                elif attacker['type'] == 'Group of Drones':
-                    with st.form(key=f'attacker_form_{idx}'):
-                        st.write("**Group of Drones Parameters**")
-                        radar_cs = st.number_input(
-                            "Radar Cross Section per Drone (m²)",
-                            min_value=0.01,
-                            value=attacker['radar_cross_section'],
-                            key=f'radar_cs_group_{idx}'
-                        )
-                        speed = st.number_input(
-                            "Speed (meters per time step)",
-                            min_value=100,
-                            max_value=1000,
-                            value=attacker['speed'],
-                            key=f'speed_group_{idx}'
-                        )
-                        altitude = st.number_input(
-                            "Altitude (meters)",
-                            min_value=100,
-                            max_value=10000,
-                            value=attacker['altitude'],
-                            key=f'altitude_group_{idx}'
-                        )
-                        guidance = st.selectbox(
-                            "Guidance Type",
-                            ATTACKER_TYPES['Group of Drones']['guidance_types'],
-                            index=ATTACKER_TYPES['Group of Drones']['guidance_types'].index(attacker['guidance']),
-                            key=f'guidance_group_{idx}'
-                        )
-                        number_of_drones = st.number_input(
-                            "Number of Drones in Group",
-                            min_value=1,
-                            max_value=10,
-                            value=ATTACKER_TYPES['Group of Drones']['number_of_drones'],
-                            key=f'num_drones_group_{idx}'
-                        )
-                        submitted = st.form_submit_button("Update Group")
-                        if submitted:
-                            updated_params = {
-                                'radar_cross_section': radar_cs,
-                                'speed': speed,
-                                'altitude': altitude,
-                                'guidance': guidance,
-                                'number_of_drones': number_of_drones
-                            }
-                            update_attacker(idx, updated_params)
-                            st.success(f"Group of Drones {idx + 1} updated.")
-
-                # Delete attacker button
-                if st.button(f"Delete Attacker {idx + 1}", key=f'delete_attacker_{idx}'):
-                    del st.session_state['attackers'][idx]
-                    st.success(f"Attacker {idx + 1} deleted.")
-                    logger.info(f"Attacker {idx + 1} deleted.")
-
+        # Radio buttons to select attacker type to add
         st.subheader("Add New Attacker")
-        with st.form(key='add_attacker_form'):
-            attacker_type = st.selectbox("Select Attacker Type", list(ATTACKER_TYPES.keys()), key='new_attacker_type')
-            if attacker_type in ['Drone', 'Group of Drones']:
-                st.write("**Place Attacker on Map**")
-                # Generate a unique key for the map using a counter
-                map_key = f"attackers_map_{st.session_state['attackers_map_counter']}"
-                st.session_state['attackers_map_counter'] += 1
+        attacker_type = st.radio(
+            "Select Attacker Type",
+            list(ATTACKER_TYPES.keys()),
+            key='select_attacker_type'
+        )
 
-                # Render attackers placement map
-                attackers_map = render_attackers_map(attacker_type)
-                output_attack = st_folium(attackers_map, width=700, height=400, key=map_key)
+        st.write("**Place Attacker on Map**")
+        # Generate a unique key for the map using a counter
+        map_key = f"attackers_map_{st.session_state['attackers_map_counter']}"
+        st.session_state['attackers_map_counter'] += 1
 
-                # Handle attacker placement
-                if output_attack and 'last_clicked' in output_attack and output_attack['last_clicked'] is not None:
-                    lat = output_attack['last_clicked']['lat']
-                    lon = output_attack['last_clicked']['lng']
-                    position = [lon, lat]
-                    add_attacker(attacker_type, position)
-                    st.success(f"{attacker_type} added at ({lat:.5f}, {lon:.5f}).")
-                    # Clear last clicked to prevent duplicate entries
-                    output_attack['last_clicked'] = None
+        # Render attackers placement map
+        attackers_map = render_attackers_map(attacker_type)
+        output_attack = st_folium(attackers_map, width=700, height=400, key=map_key)
 
-            submitted_attacker = st.form_submit_button("Add Attacker")
-            if submitted_attacker:
-                if attacker_type in ['Drone', 'Group of Drones']:
-                    st.info("Click on the map above to place the attacker(s).")
-                else:
-                    st.warning("Please select a valid attacker type.")
+        # Handle attacker placement
+        if output_attack and 'last_clicked' in output_attack and output_attack['last_clicked'] is not None:
+            lat = output_attack['last_clicked']['lat']
+            lon = output_attack['last_clicked']['lng']
+            position = [lon, lat]
+            add_attacker(attacker_type, position)
+            st.success(f"{attacker_type} added at ({lat:.5f}, {lon:.5f}).")
+            # Clear last clicked to prevent duplicate entries
+            output_attack['last_clicked'] = None
+
+        # Display list of attackers
+        st.subheader("Existing Attackers")
+        if len(st.session_state['attackers']) == 0:
+            st.write("No attackers added yet.")
+        else:
+            for idx, attacker in enumerate(st.session_state['attackers']):
+                with st.expander(f"Attacker {idx + 1}: {attacker['type']}"):
+                    st.write(f"**Type**: {attacker['type']}")
+                    st.write(f"**Position**: ({attacker['position'][1]:.5f}, {attacker['position'][0]:.5f})")
+
+                    # Editable parameters based on attacker type
+                    if attacker['type'] == 'Drone':
+                        with st.form(key=f'attacker_form_{idx}'):
+                            st.write("**Drone Parameters**")
+                            radar_cs = st.number_input(
+                                "Radar Cross Section (m²)",
+                                min_value=0.01,
+                                value=attacker['radar_cross_section'],
+                                key=f'radar_cs_{idx}'
+                            )
+                            speed = st.number_input(
+                                "Speed (meters per time step)",
+                                min_value=100,
+                                max_value=1000,
+                                value=attacker['speed'],
+                                key=f'speed_{idx}'
+                            )
+                            altitude = st.number_input(
+                                "Altitude (meters)",
+                                min_value=100,
+                                max_value=10000,
+                                value=attacker['altitude'],
+                                key=f'altitude_{idx}'
+                            )
+                            guidance = st.selectbox(
+                                "Guidance Type",
+                                ATTACKER_TYPES['Drone']['guidance_types'],
+                                index=ATTACKER_TYPES['Drone']['guidance_types'].index(attacker['guidance']),
+                                key=f'guidance_{idx}'
+                            )
+                            submitted = st.form_submit_button("Update Drone")
+                            if submitted:
+                                updated_params = {
+                                    'radar_cross_section': radar_cs,
+                                    'speed': speed,
+                                    'altitude': altitude,
+                                    'guidance': guidance
+                                }
+                                update_attacker(idx, updated_params)
+                                st.success(f"Drone {idx + 1} updated.")
+                    elif attacker['type'] == 'Group of Drones':
+                        with st.form(key=f'attacker_form_{idx}'):
+                            st.write("**Group of Drones Parameters**")
+                            radar_cs = st.number_input(
+                                "Radar Cross Section per Drone (m²)",
+                                min_value=0.01,
+                                value=attacker['radar_cross_section'],
+                                key=f'radar_cs_group_{idx}'
+                            )
+                            speed = st.number_input(
+                                "Speed (meters per time step)",
+                                min_value=100,
+                                max_value=1000,
+                                value=attacker['speed'],
+                                key=f'speed_group_{idx}'
+                            )
+                            altitude = st.number_input(
+                                "Altitude (meters)",
+                                min_value=100,
+                                max_value=10000,
+                                value=attacker['altitude'],
+                                key=f'altitude_group_{idx}'
+                            )
+                            guidance = st.selectbox(
+                                "Guidance Type",
+                                ATTACKER_TYPES['Group of Drones']['guidance_types'],
+                                index=ATTACKER_TYPES['Group of Drones']['guidance_types'].index(attacker['guidance']),
+                                key=f'guidance_group_{idx}'
+                            )
+                            number_of_drones = st.number_input(
+                                "Number of Drones in Group",
+                                min_value=1,
+                                max_value=10,
+                                value=ATTACKER_TYPES['Group of Drones']['number_of_drones'],
+                                key=f'num_drones_group_{idx}'
+                            )
+                            submitted = st.form_submit_button("Update Group")
+                            if submitted:
+                                updated_params = {
+                                    'radar_cross_section': radar_cs,
+                                    'speed': speed,
+                                    'altitude': altitude,
+                                    'guidance': guidance,
+                                    'number_of_drones': number_of_drones
+                                }
+                                update_attacker(idx, updated_params)
+                                st.success(f"Group of Drones {idx + 1} updated.")
+
+                    # Delete attacker button
+                    if st.button(f"Delete Attacker {idx + 1}", key=f'delete_attacker_{idx}'):
+                        del st.session_state['attackers'][idx]
+                        st.success(f"Attacker {idx + 1} deleted.")
+                        logger.info(f"Attacker {idx + 1} deleted.")
 
     # -------------------- Defenders Tab --------------------
     with tab_defenders:
         st.header("Defenders Management")
         st.write("Manage the list of defenders by adding or editing them.")
 
-        # List existing defenders
-        for idx, defender in enumerate(st.session_state['defenders']):
-            with st.expander(f"Defender {idx + 1}: {defender['type']}"):
-                st.write(f"**Type**: {defender['type']}")
-                st.write(f"**Position**: ({defender['position'][1]:.5f}, {defender['position'][0]:.5f})")
-                st.write(f"**Missiles Available**: {defender['missile_number']}/{DEFENDER_TYPES[defender['type']]['max_missile_number']}")
-
-                # Editable parameters based on defender type
-                if defender['type'] in DEFENDER_TYPES:
-                    with st.form(key=f'defender_form_{idx}'):
-                        st.write("**Defender Parameters**")
-                        range_m = st.number_input(
-                            "Range (meters)",
-                            min_value=1000,
-                            value=int(defender['range'] * 111000),
-                            key=f'range_defender_{idx}'
-                        )
-                        max_targets = st.number_input(
-                            "Max Targets to Track",
-                            min_value=1,
-                            value=defender['max_targets'],
-                            key=f'max_targets_defender_{idx}'
-                        )
-                        missile_number = st.number_input(
-                            "Missile Number",
-                            min_value=0,
-                            max_value=DEFENDER_TYPES[defender['type']]['max_missile_number'],
-                            value=defender['missile_number'],
-                            key=f'missile_number_defender_{idx}'
-                        )
-                        submitted = st.form_submit_button("Update Defender")
-                        if submitted:
-                            updated_params = {
-                                'range': range_m / 111000,  # Convert meters to degrees
-                                'max_targets': max_targets,
-                                'missile_number': missile_number
-                            }
-                            update_defender(idx, updated_params)
-                            st.success(f"Defender {idx + 1} updated.")
-
-                # Delete defender button
-                if st.button(f"Delete Defender {idx + 1}", key=f'delete_defender_{idx}'):
-                    del st.session_state['defenders'][idx]
-                    st.success(f"Defender {idx + 1} deleted.")
-                    logger.info(f"Defender {idx + 1} deleted.")
-
+        # Radio buttons to select defender type to add
         st.subheader("Add New Defender")
-        with st.form(key='add_defender_form'):
-            defender_type = st.selectbox("Select Defender Type", list(DEFENDER_TYPES.keys()), key='new_defender_type')
-            st.write("**Place Defender on Map**")
-            # Generate a unique key for the map using a counter
-            map_key = f"defenders_map_{st.session_state['defenders_map_counter']}"
-            st.session_state['defenders_map_counter'] += 1
+        defender_type = st.radio(
+            "Select Defender Type",
+            list(DEFENDER_TYPES.keys()),
+            key='select_defender_type'
+        )
 
-            # Render defenders placement map
-            defenders_map = render_defenders_map(defender_type)
-            output_defender = st_folium(defenders_map, width=700, height=400, key=map_key)
+        st.write("**Place Defender on Map**")
+        # Generate a unique key for the map using a counter
+        map_key = f"defenders_map_{st.session_state['defenders_map_counter']}"
+        st.session_state['defenders_map_counter'] += 1
 
-            # Handle defender placement
-            if output_defender and 'last_clicked' in output_defender and output_defender['last_clicked'] is not None:
-                lat = output_defender['last_clicked']['lat']
-                lon = output_defender['last_clicked']['lng']
-                position = [lon, lat]
-                add_defender(defender_type, position)
-                st.success(f"{defender_type} Defender added at ({lat:.5f}, {lon:.5f}).")
-                logger.info(f"{defender_type} Defender added at ({lon}, {lat}).")
-                # Clear last clicked to prevent duplicate entries
-                output_defender['last_clicked'] = None
+        # Render defenders placement map
+        defenders_map = render_defenders_map(defender_type)
+        output_defender = st_folium(defenders_map, width=700, height=400, key=map_key)
 
-            submitted_defender = st.form_submit_button("Add Defender")
-            if submitted_defender:
-                if defender_type in DEFENDER_TYPES:
-                    st.info("Click on the map above to place the defender.")
-                else:
-                    st.warning("Please select a valid defender type.")
+        # Handle defender placement
+        if output_defender and 'last_clicked' in output_defender and output_defender['last_clicked'] is not None:
+            lat = output_defender['last_clicked']['lat']
+            lon = output_defender['last_clicked']['lng']
+            position = [lon, lat]
+            add_defender(defender_type, position)
+            st.success(f"{defender_type} Defender added at ({lat:.5f}, {lon:.5f}).")
+            # Clear last clicked to prevent duplicate entries
+            output_defender['last_clicked'] = None
+
+        # Display list of defenders
+        st.subheader("Existing Defenders")
+        if len(st.session_state['defenders']) == 0:
+            st.write("No defenders added yet.")
+        else:
+            for idx, defender in enumerate(st.session_state['defenders']):
+                with st.expander(f"Defender {idx + 1}: {defender['type']}"):
+                    st.write(f"**Type**: {defender['type']}")
+                    st.write(f"**Position**: ({defender['position'][1]:.5f}, {defender['position'][0]:.5f})")
+                    st.write(f"**Missiles Available**: {defender['missile_number']}/{DEFENDER_TYPES[defender['type']]['max_missile_number']}")
+
+                    # Editable parameters based on defender type
+                    if defender['type'] in DEFENDER_TYPES:
+                        with st.form(key=f'defender_form_{idx}'):
+                            st.write("**Defender Parameters**")
+                            range_m = st.number_input(
+                                "Range (meters)",
+                                min_value=1000,
+                                value=int(defender['range'] * 111000),
+                                key=f'range_defender_{idx}'
+                            )
+                            max_targets = st.number_input(
+                                "Max Targets to Track",
+                                min_value=1,
+                                value=defender['max_targets'],
+                                key=f'max_targets_defender_{idx}'
+                            )
+                            missile_number = st.number_input(
+                                "Missile Number",
+                                min_value=0,
+                                max_value=DEFENDER_TYPES[defender['type']]['max_missile_number'],
+                                value=defender['missile_number'],
+                                key=f'missile_number_defender_{idx}'
+                            )
+                            submitted = st.form_submit_button("Update Defender")
+                            if submitted:
+                                updated_params = {
+                                    'range': range_m / 111000,  # Convert meters to degrees
+                                    'max_targets': max_targets,
+                                    'missile_number': missile_number
+                                }
+                                update_defender(idx, updated_params)
+                                st.success(f"Defender {idx + 1} updated.")
+
+                    # Delete defender button
+                    if st.button(f"Delete Defender {idx + 1}", key=f'delete_defender_{idx}'):
+                        del st.session_state['defenders'][idx]
+                        st.success(f"Defender {idx + 1} deleted.")
+                        logger.info(f"Defender {idx + 1} deleted.")
 
     # -------------------- Simulation Results Tab --------------------
     with tab_results:
